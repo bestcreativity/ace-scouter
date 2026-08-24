@@ -39,20 +39,10 @@ create table if not exists public.email_logs (
   replied boolean not null default false
 );
 
-create table if not exists public.pitch_drafts (
-  id uuid primary key default gen_random_uuid(),
-  lead_id uuid not null references public.leads(id) on delete cascade,
-  subject text not null,
-  body text not null,
-  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
-  created_at timestamptz not null default now()
-);
-
 alter table public.profiles enable row level security;
 alter table public.campaigns enable row level security;
 alter table public.leads enable row level security;
 alter table public.email_logs enable row level security;
-alter table public.pitch_drafts enable row level security;
 
 create policy "Users can manage their profile" on public.profiles
   for all using (auth.uid() = id) with check (auth.uid() = id);
@@ -67,10 +57,6 @@ create policy "Users can manage campaign leads" on public.leads
 create policy "Users can manage lead email logs" on public.email_logs
   for all using (exists (select 1 from public.leads join public.campaigns on campaigns.id = leads.campaign_id where leads.id = email_logs.lead_id and campaigns.user_id = auth.uid()))
   with check (exists (select 1 from public.leads join public.campaigns on campaigns.id = leads.campaign_id where leads.id = email_logs.lead_id and campaigns.user_id = auth.uid()));
-
-create policy "Users can manage lead pitch drafts" on public.pitch_drafts
-  for all using (exists (select 1 from public.leads join public.campaigns on campaigns.id = leads.campaign_id where leads.id = pitch_drafts.lead_id and campaigns.user_id = auth.uid()))
-  with check (exists (select 1 from public.leads join public.campaigns on campaigns.id = leads.campaign_id where leads.id = pitch_drafts.lead_id and campaigns.user_id = auth.uid()));
 
 create or replace function public.handle_new_user()
 returns trigger
