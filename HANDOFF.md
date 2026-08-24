@@ -42,7 +42,7 @@ Authentication now uses the Supabase client in `src/lib/supabase.js`:
 - Sign-out from the profile row
 - Missing Supabase environment variables show a configuration message
 
-The pitch queue implementation is in `src/main.jsx`: it generates deterministic personalized drafts from discovered lead data, stores them in `pitch_drafts`, and supports pending/approved/rejected review states. Apply `supabase/migrations/20260824000001_pitch_drafts.sql` to the live database before using draft generation. Until then, the app tolerates a missing `pitch_drafts` table and shows an empty queue.
+The pitch queue implementation is in `src/main.jsx`: it generates deterministic personalized drafts from discovered lead data, stores them in `pitch_drafts`, and supports pending/approved/rejected review states. Migration `supabase/migrations/20260824000001_pitch_drafts.sql` has been applied to the live database and verified with an information-schema query.
 
 The dashboard now queries authenticated `campaigns`, `leads`, and `email_logs` records. Metrics, pipeline counts, reply rate, and priority leads are live. Empty and error states replace the former sample records. The campaign builder validates and persists an active campaign row.
 
@@ -66,7 +66,7 @@ Live database state was verified in Supabase SQL Editor. These tables exist:
 - `public.campaigns`
 - `public.leads`
 - `public.email_logs`
-- `public.pitch_drafts` (pending application; use the separate `20260824000001_pitch_drafts.sql` migration)
+- `public.pitch_drafts` (live and verified; use the separate `20260824000001_pitch_drafts.sql` migration)
 
 The migration also enables RLS, creates user-scoped policies, and creates an `auth.users` trigger that inserts a profile row for new users.
 
