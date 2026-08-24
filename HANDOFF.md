@@ -69,7 +69,7 @@ Live database state was verified in Supabase SQL Editor. These tables exist:
 - `public.leads`
 - `public.email_logs`
 - `public.pitch_drafts` (live and verified; use the separate `20260824000001_pitch_drafts.sql` migration)
-- `profiles.sending_email` (migration prepared in `20260824000004_sender_email.sql`; apply before using editable sender settings)
+- `profiles.sending_email` (live and verified; migration source `20260824000004_sender_email.sql`)
 
 The migration also enables RLS, creates user-scoped policies, and creates an `auth.users` trigger that inserts a profile row for new users.
 
@@ -132,7 +132,7 @@ Supabase's project-level GitHub integration was attempted from Project Settings 
 6. Add CRM table/Kanban interactions and pitch approval persistence.
 7. Move free scouting behind a server-side worker or Edge Function and deduplicate results.
 8. Apply `20260824000002_email_automation.sql` in Supabase SQL Editor.
-9. Apply `20260824000004_sender_email.sql`, configure a verified Resend sending domain and Supabase Function secrets, then deploy both Edge Functions.
+9. Configure a verified Resend sending domain and Supabase Function secrets, then deploy both Edge Functions.
 10. Add a scheduled worker for exactly five follow-ups, checking `sequence_halted` before every send.
 11. Add automated tests for auth, RLS, campaign creation, lead status transitions, follow-up halting, and webhook processing.
 12. Deploy the frontend and configure production environment variables.
