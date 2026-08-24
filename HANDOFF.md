@@ -11,7 +11,7 @@ This file is the source of truth for a new chat. Update it whenever implementati
 - Local path: `C:\Users\DELL\Desktop\webappacescouter`
 - GitHub: https://github.com/bestcreativity/ace-scouter
 - Branch: `main`
-- Latest known commit: `3a04115 Add Supabase project foundation`
+- Latest known commit: `50afc7a Add Supabase authentication entrypoint`
 - Remote: `origin` points to the GitHub repository above
 - Local dev URL: http://localhost:5173/
 
@@ -33,7 +33,16 @@ Implemented in `src/main.jsx` and `src/styles.css`:
 - Placeholder views for Campaigns, Lead CRM, Pitch queue, and Integrations
 - Toast feedback for key interactions
 
-The UI currently uses mock data. It is not yet authenticated and does not yet read/write dashboard data from Supabase.
+Authentication now uses the Supabase client in `src/lib/supabase.js`:
+
+- Email/password sign-in
+- Email/password account creation
+- Authenticated session loading and auth-state updates
+- Dashboard gated behind an active Supabase session
+- Sign-out from the profile row
+- Missing Supabase environment variables show a configuration message
+
+The dashboard data is still mock data. Authentication is real, but campaigns, leads, analytics, activity, and pitch queue records are not yet loaded from Supabase.
 
 ## Supabase
 
@@ -102,7 +111,7 @@ Supabase's project-level GitHub integration was attempted from Project Settings 
 1. Rotate the compromised database password with project-owner/admin permission.
 2. Decide whether to complete Supabase GitHub integration; it is optional for the current Git-based workflow.
 3. Add the Supabase anon key to deployment environment variables.
-4. Add Supabase Auth UI for email/password and Google OAuth.
+4. Configure Supabase email confirmation and Google OAuth redirect settings as needed.
 5. Replace mock dashboard data with authenticated Supabase queries and mutations.
 6. Add campaign creation persistence from the campaign modal.
 7. Add CRM table/Kanban interactions and pitch approval persistence.
