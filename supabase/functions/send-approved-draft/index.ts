@@ -34,9 +34,10 @@ Deno.serve(async (request) => {
     if (!lead?.decision_maker_email || !lead.email_verified) throw new Error('A verified recipient email is required')
     if (lead.sequence_halted) throw new Error('This lead sequence is halted')
 
+    const { data: profile } = await userClient.from('profiles').select('sending_email').eq('id', user.id).single()
     const resendKey = Deno.env.get('RESEND_API_KEY')
-    const from = Deno.env.get('RESEND_FROM_EMAIL')
-    if (!resendKey || !from) throw new Error('Email provider is not configured')
+    const from = profile?.sending_email
+    if (!resendKey || !from) throw new Error('Set a sending email in Integrations before sending')
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
