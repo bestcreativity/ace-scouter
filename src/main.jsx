@@ -78,23 +78,27 @@ function Dashboard({ session }) {
   const [campaigns, setCampaigns] = useState([])
   const [leads, setLeads] = useState([])
   const [emailLogs, setEmailLogs] = useState([])
+  const [drafts, setDrafts] = useState([])
   const [dataLoading, setDataLoading] = useState(true)
   const [dataError, setDataError] = useState('')
 
   const loadData = async () => {
     setDataLoading(true)
     setDataError('')
-    const [campaignResult, leadResult, emailResult] = await Promise.all([
+    const [campaignResult, leadResult, emailResult, draftResult] = await Promise.all([
       supabase.from('campaigns').select('*').order('created_at', { ascending: false }),
       supabase.from('leads').select('*, campaigns(target_niche, location)').order('created_at', { ascending: false }),
       supabase.from('email_logs').select('*').order('sent_at', { ascending: false }),
+      supabase.from('pitch_drafts').select('*, leads(business_name, decision_maker_name, decision_maker_email, campaigns(target_niche, location))').order('created_at', { ascending: false }),
     ])
-    const failure = campaignResult.error || leadResult.error || emailResult.error
+    const draftTableMissing = draftResult.error?.code === '42P01'
+    const failure = campaignResult.error || leadResult.error || emailResult.error || (!draftTableMissing && draftResult.error)
     if (failure) setDataError(failure.message)
     else {
       setCampaigns(campaignResult.data || [])
       setLeads(leadResult.data || [])
       setEmailLogs(emailResult.data || [])
+      setDrafts(draftTableMissing ? [] : (draftResult.data || []))
     }
     setDataLoading(false)
   }
@@ -150,6 +154,22 @@ function Dashboard({ session }) {
     return rows.length
   }
 
+  const generateDrafts = async () => {
+    const freshLeads = leads.filter((lead) => lead.status === 'discovered' && !drafts.some((draft) => draft.lead_id === lead.id))
+    if (!freshLeads.length) return 0
+    const rows = freshLeads.map((lead) => ({ lead_id: lead.id, subject: `A quick idea for ${lead.business_name}`, body: `Hi${lead.decision_maker_name ? ` ${lead.decision_maker_name}` : ''},\n\nI found ${lead.business_name} while researching ${lead.campaigns?.target_niche || 'local businesses'} in ${lead.campaigns?.location || 'your area'}. I noticed an opportunity to help you turn more local interest into qualified conversations.\n\nWould it be useful to compare notes for 15 minutes next week?\n\nBest,\n${session.user.user_metadata?.full_name || 'Your name'}`, status: 'pending' }))
+    const { error } = await supabase.from('pitch_drafts').insert(rows)
+    if (error) throw error
+    await loadData()
+    return rows.length
+  }
+
+  const updateDraft = async (id, status) => {
+    const { error } = await supabase.from('pitch_drafts').update({ status }).eq('id', id)
+    if (error) throw error
+    await loadData()
+  }
+
   const notify = (message) => {
     setToast(message)
     window.setTimeout(() => setToast(''), 2600)
@@ -203,12 +223,16 @@ function Dashboard({ session }) {
           <section className="lower-grid"><article className="panel pipeline-panel"><div className="panel-header"><div><h2>Lead pipeline</h2><p>Current status across all campaigns</p></div><button className="text-button" onClick={() => setActiveNav('Lead CRM')}>Open CRM <ArrowUpRight size={14} /></button></div><div className="pipeline-list">{livePipeline.map((item) => <div className="pipeline-row" key={item.label}><div className="pipeline-name"><i className={`pipeline-dot ${item.color}`} />{item.label}</div><strong>{dataLoading ? '...' : item.count}</strong><div className="pipeline-bar"><span className={item.color} style={{ width: `${Math.max(18, item.count / 1.5)}%` }} /></div><span className="pipeline-percent">{leads.length ? `${Math.round((item.count / leads.length) * 100)}%` : '0%'}</span></div>)}</div></article><article className="panel queue-panel"><div className="panel-header"><div><h2>Pitch queue</h2><p>AI drafts waiting for approval</p></div><button className="queue-count" onClick={() => setActiveNav('Pitch queue')}>0 <ChevronRight size={14} /></button></div><div className="queue-feature"><div className="sparkle-orbit"><Sparkles size={20} /></div><div><strong>No pitches waiting</strong><p>Approved campaigns will create drafts here.</p></div></div><button className="outline-button" onClick={() => setActiveNav('Pitch queue')}><FileText size={15} /> Open pitch queue</button></article></section>
 
           <section className="panel leads-panel"><div className="panel-header leads-header"><div><h2>Priority leads</h2><p>Your highest-intent prospects, updated in real time</p></div><div className="lead-actions"><div className="search-box"><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search leads" /></div><button className="filter-button"><Filter size={15} /> Filters</button><button className="text-button" onClick={() => setActiveNav('Lead CRM')}>View all <ArrowUpRight size={14} /></button></div></div><div className="table-wrap">{dataError ? <div className="empty-panel error-state"><X size={18} /><strong>Could not load workspace data</strong><span>{dataError}</span></div> : filteredLeads.length === 0 && !dataLoading ? <div className="empty-panel"><Users size={18} /><strong>No leads yet</strong><span>Create a campaign to begin discovering prospects.</span><button className="outline-button" onClick={() => setShowCampaign(true)}>Create your first campaign</button></div> : <table><thead><tr><th>Company</th><th>Campaign</th><th>Lead score</th><th>Status</th><th>Last activity</th><th /></tr></thead><tbody>{filteredLeads.map((lead, index) => { const name = lead.business_name; const person = lead.decision_maker_name || 'Decision-maker not enriched'; const location = lead.campaigns?.location || 'Location unavailable'; const campaign = lead.campaigns?.target_niche || 'Unassigned'; const status = lead.status.replace('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()); const score = lead.lead_score || 0; return <tr key={lead.id}><td><div className="company-cell"><div className="company-avatar sky">{name.slice(0, 2).toUpperCase()}</div><div><strong>{name}</strong><span>{person} · {location}</span></div></div></td><td><span className="campaign-tag"><Building2 size={13} />{campaign}</span></td><td><div className="score"><span className="score-ring" style={{ '--score': `${score * 3.6}deg` }}>{score}</span><span>{score > 90 ? 'High intent' : score > 80 ? 'Warm' : 'New'}</span></div></td><td><span className={`status-pill ${lead.status.replace('_', '-')}`}><i />{status}</span></td><td><span className="last-activity">{index === 0 ? 'Latest' : 'Earlier'}</span></td><td><button className="row-menu" aria-label={`Open ${name}`}><MoreHorizontal size={17} /></button></td></tr> })}</tbody></table>}</div></section>
-        </> : <PlaceholderView activeNav={activeNav} onPrimary={() => setShowCampaign(true)} />}
+        </> : activeNav === 'Pitch queue' ? <PitchQueue drafts={drafts} onGenerate={async () => { try { const count = await generateDrafts(); notify(count ? `${count} pitch drafts created.` : 'No new leads need drafts.') } catch (error) { notify(`Could not create drafts: ${error.message}`) } }} onUpdate={async (id, status) => { try { await updateDraft(id, status); notify(`Draft ${status}.`) } catch (error) { notify(`Could not update draft: ${error.message}`) } }} /> : <PlaceholderView activeNav={activeNav} onPrimary={() => setShowCampaign(true)} />}
       </main>
       {showCampaign && <CampaignModal onClose={() => setShowCampaign(false)} onCreate={async (campaign) => { try { const savedCampaign = await createCampaign(campaign); setShowCampaign(false); notify('Campaign saved. Scouting nearby businesses...'); const count = await scoutCampaign(savedCampaign); notify(count ? `Scouting complete: ${count} leads added.` : 'Campaign saved, but no named businesses were found.') } catch (error) { notify(`Could not complete campaign: ${error.message}`); throw error } }} />}
       {toast && <div className="toast"><Check size={16} />{toast}</div>}
     </div>
   )
+}
+
+function PitchQueue({ drafts, onGenerate, onUpdate }) {
+  return <section className="module-view"><div className="eyebrow"><Sparkles size={13} /> Human review</div><div className="module-heading"><div><h1>Pitch queue</h1><p>Review personalized drafts before anything can be sent.</p></div><button className="primary-button" onClick={onGenerate}><Sparkles size={15} /> Generate drafts</button></div>{drafts.length === 0 ? <div className="panel empty-module"><Sparkles size={20} /><strong>No drafts waiting</strong><span>Generate drafts from discovered leads when your pipeline has prospects.</span></div> : <div className="draft-list">{drafts.map((draft) => <article className="panel draft-card" key={draft.id}><div className="draft-meta"><span>{draft.leads?.business_name || 'Unknown business'}</span><small>{draft.leads?.decision_maker_email || 'Email not enriched'}</small></div><h2>{draft.subject}</h2><p>{draft.body}</p><div className="draft-footer"><span className={`draft-status ${draft.status}`}>{draft.status}</span>{draft.status === 'pending' && <div><button className="outline-button" onClick={() => onUpdate(draft.id, 'rejected')}>Reject</button><button className="primary-button" onClick={() => onUpdate(draft.id, 'approved')}><Check size={14} /> Approve</button></div>}</div></article>)}</div>}</section>
 }
 
 function PlaceholderView({ activeNav, onPrimary }) {

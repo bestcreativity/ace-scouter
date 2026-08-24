@@ -42,6 +42,8 @@ Authentication now uses the Supabase client in `src/lib/supabase.js`:
 - Sign-out from the profile row
 - Missing Supabase environment variables show a configuration message
 
+The pitch queue implementation is in `src/main.jsx`: it generates deterministic personalized drafts from discovered lead data, stores them in `pitch_drafts`, and supports pending/approved/rejected review states. Apply `supabase/migrations/20260824000001_pitch_drafts.sql` to the live database before using draft generation. Until then, the app tolerates a missing `pitch_drafts` table and shows an empty queue.
+
 The dashboard now queries authenticated `campaigns`, `leads`, and `email_logs` records. Metrics, pipeline counts, reply rate, and priority leads are live. Empty and error states replace the former sample records. The campaign builder validates and persists an active campaign row.
 
 Free scouting is now implemented in `src/main.jsx`: after campaign creation, the browser uses OpenStreetMap Nominatim to geocode the location and the public Overpass API to find named nearby businesses, then saves up to 10 leads with public website links when available. This is an MVP discovery path with public-service rate limits; it is not a substitute for paid Places or enrichment providers and does not discover verified decision-maker emails.
@@ -64,6 +66,7 @@ Live database state was verified in Supabase SQL Editor. These tables exist:
 - `public.campaigns`
 - `public.leads`
 - `public.email_logs`
+- `public.pitch_drafts` (pending application; use the separate `20260824000001_pitch_drafts.sql` migration)
 
 The migration also enables RLS, creates user-scoped policies, and creates an `auth.users` trigger that inserts a profile row for new users.
 
@@ -114,12 +117,13 @@ Supabase's project-level GitHub integration was attempted from Project Settings 
 2. Decide whether to complete Supabase GitHub integration; it is optional for the current Git-based workflow.
 3. Add the Supabase anon key to deployment environment variables.
 4. Configure Supabase email confirmation and Google OAuth redirect settings as needed.
-5. Add CRM table/Kanban interactions and pitch approval persistence.
-6. Move free scouting behind a server-side worker or Edge Function and deduplicate results.
-7. Add the `/api/webhooks/email-status` handler and stop follow-ups on replies.
-8. Add provider integrations for Google Places, Apollo, Hunter, and Resend/SendGrid using server-only secrets.
-9. Add automated tests for auth, RLS, campaign creation, lead status transitions, follow-up halting, and webhook processing.
-10. Deploy the frontend and configure production environment variables.
+5. Apply the `pitch_drafts` table and policy from the updated migration in Supabase SQL Editor.
+6. Add CRM table/Kanban interactions and pitch approval persistence.
+7. Move free scouting behind a server-side worker or Edge Function and deduplicate results.
+8. Add the `/api/webhooks/email-status` handler and stop follow-ups on replies.
+9. Add provider integrations for Google Places, Apollo, Hunter, and Resend/SendGrid using server-only secrets.
+10. Add automated tests for auth, RLS, campaign creation, lead status transitions, follow-up halting, and webhook processing.
+11. Deploy the frontend and configure production environment variables.
 
 Current deployment note: Vercel is not authenticated in the browser session. The deployed app showed the missing-environment message because Vercel did not have `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` configured at build time. Add both under Vercel Project Settings -> Environment Variables for Production, then redeploy. The local `.env` is not uploaded to Vercel.
 
