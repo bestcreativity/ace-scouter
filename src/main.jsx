@@ -17,34 +17,6 @@ const navItems = [
   { label: 'Integrations', icon: Settings },
 ]
 
-const stats = [
-  { label: 'Leads discovered', value: '2,847', change: '+18.4%', meta: 'vs. last 7 days', icon: Target, tone: 'blue' },
-  { label: 'Emails delivered', value: '1,924', change: '+12.8%', meta: 'vs. last 7 days', icon: Send, tone: 'green' },
-  { label: 'Reply rate', value: '8.6%', change: '+2.1%', meta: 'vs. last 7 days', icon: Inbox, tone: 'orange' },
-  { label: 'Active campaigns', value: '04', change: 'On track', meta: 'daily automation', icon: Zap, tone: 'violet' },
-]
-
-const activity = [
-  { type: 'reply', title: 'New reply from', subject: 'Dr. Maya Patel · Austin Smile Co.', time: '8 min ago', color: 'green' },
-  { type: 'lead', title: 'Lead enriched', subject: 'Summit Air & Mechanical · Phoenix, AZ', time: '21 min ago', color: 'blue' },
-  { type: 'send', title: 'Sequence batch sent', subject: 'HVAC Contractors · 84 emails', time: '42 min ago', color: 'orange' },
-  { type: 'lead', title: 'Lead enriched', subject: 'Northline Dental Group · Denver, CO', time: '1 hr ago', color: 'blue' },
-]
-
-const pipeline = [
-  { label: 'Discovered', count: 128, color: 'blue' },
-  { label: 'In sequence', count: 76, color: 'orange' },
-  { label: 'Replied', count: 18, color: 'green' },
-  { label: 'Meeting booked', count: 7, color: 'violet' },
-]
-
-const leads = [
-  { name: 'Austin Smile Co.', person: 'Dr. Maya Patel', location: 'Austin, TX', campaign: 'Dental clinics', status: 'Replied', score: 94, initials: 'AS', color: 'peach' },
-  { name: 'Summit Air & Mechanical', person: 'Jordan Kim', location: 'Phoenix, AZ', campaign: 'HVAC contractors', status: 'Follow-up 2', score: 88, initials: 'SA', color: 'mint' },
-  { name: 'Northline Dental Group', person: 'Elena Rodriguez', location: 'Denver, CO', campaign: 'Dental clinics', status: 'Primary sent', score: 81, initials: 'ND', color: 'lavender' },
-  { name: 'Bluebird Electric', person: 'Marcus Lee', location: 'Raleigh, NC', campaign: 'Electrical services', status: 'Discovered', score: 76, initials: 'BE', color: 'sky' },
-]
-
 function App() {
   const [session, setSession] = useState(null)
   const [authLoading, setAuthLoading] = useState(Boolean(supabase))
@@ -103,10 +75,54 @@ function Dashboard({ session }) {
   const [range, setRange] = useState('Last 7 days')
   const [query, setQuery] = useState('')
   const [toast, setToast] = useState('')
+  const [campaigns, setCampaigns] = useState([])
+  const [leads, setLeads] = useState([])
+  const [emailLogs, setEmailLogs] = useState([])
+  const [dataLoading, setDataLoading] = useState(true)
+  const [dataError, setDataError] = useState('')
+
+  const loadData = async () => {
+    setDataLoading(true)
+    setDataError('')
+    const [campaignResult, leadResult, emailResult] = await Promise.all([
+      supabase.from('campaigns').select('*').order('created_at', { ascending: false }),
+      supabase.from('leads').select('*, campaigns(target_niche, location)').order('created_at', { ascending: false }),
+      supabase.from('email_logs').select('*').order('sent_at', { ascending: false }),
+    ])
+    const failure = campaignResult.error || leadResult.error || emailResult.error
+    if (failure) setDataError(failure.message)
+    else {
+      setCampaigns(campaignResult.data || [])
+      setLeads(leadResult.data || [])
+      setEmailLogs(emailResult.data || [])
+    }
+    setDataLoading(false)
+  }
+
+  useEffect(() => { loadData() }, [])
+
+  const liveStats = [
+    { label: 'Leads discovered', value: leads.length.toLocaleString(), change: '', meta: 'all campaigns', icon: Target, tone: 'blue' },
+    { label: 'Emails delivered', value: emailLogs.length.toLocaleString(), change: '', meta: 'tracked sends', icon: Send, tone: 'green' },
+    { label: 'Reply rate', value: emailLogs.length ? `${Math.round((emailLogs.filter((log) => log.replied).length / emailLogs.length) * 100)}%` : '0%', change: '', meta: 'tracked replies', icon: Inbox, tone: 'orange' },
+    { label: 'Active campaigns', value: campaigns.filter((campaign) => campaign.status === 'active').length.toString().padStart(2, '0'), change: '', meta: 'in this workspace', icon: Zap, tone: 'violet' },
+  ]
+
+  const livePipeline = ['discovered', 'primary_sent', 'followup_1', 'followup_2', 'followup_3', 'followup_4', 'followup_5', 'replied'].map((status) => ({
+    label: status === 'primary_sent' ? 'Primary sent' : status.replace('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()),
+    count: leads.filter((lead) => lead.status === status).length,
+    color: status === 'replied' ? 'green' : status === 'discovered' ? 'blue' : 'orange',
+  }))
 
   const filteredLeads = useMemo(() => leads.filter((lead) =>
-    `${lead.name} ${lead.person} ${lead.location}`.toLowerCase().includes(query.toLowerCase())
+    `${lead.business_name} ${lead.decision_maker_name || ''} ${lead.campaigns?.location || ''}`.toLowerCase().includes(query.toLowerCase())
   ), [query])
+
+  const createCampaign = async (campaign) => {
+    const { error } = await supabase.from('campaigns').insert({ ...campaign, user_id: session.user.id })
+    if (error) throw error
+    await loadData()
+  }
 
   const notify = (message) => {
     setToast(message)
@@ -151,19 +167,19 @@ function Dashboard({ session }) {
         {activeNav === 'Overview' ? <>
           <section className="hero-row"><div><div className="eyebrow"><Activity size={13} /> Live command center</div><h1>Good morning, Jordan<span>.</span></h1><p>Here’s what’s moving across your prospecting engine.</p></div><button className="primary-button" onClick={() => setShowCampaign(true)}><Plus size={17} /> New campaign</button></section>
 
-          <section className="stats-grid">{stats.map(({ label, value, change, meta, icon: Icon, tone }) => <article className="stat-card" key={label}><div className={`stat-icon ${tone}`}><Icon size={18} /></div><div className="stat-label">{label}<span className="info-dot">i</span></div><div className="stat-value">{value}</div><div className="stat-footer"><strong className={change.includes('+') ? 'positive' : ''}>{change}</strong><span>{meta}</span></div></article>)}</section>
+          <section className="stats-grid">{liveStats.map(({ label, value, change, meta, icon: Icon, tone }) => <article className="stat-card" key={label}><div className={`stat-icon ${tone}`}><Icon size={18} /></div><div className="stat-label">{label}<span className="info-dot">i</span></div><div className="stat-value">{dataLoading ? '...' : value}</div><div className="stat-footer"><strong className={change.includes('+') ? 'positive' : ''}>{change || 'Live'}</strong><span>{meta}</span></div></article>)}</section>
 
           <section className="dashboard-grid">
             <article className="panel chart-panel"><div className="panel-header"><div><h2>Outreach performance</h2><p>Activity across all active campaigns</p></div><button className="select-button">{range}<ChevronDown size={14} /></button></div><div className="chart-legend"><span><i className="legend-dot blue" /> Emails sent</span><span><i className="legend-dot orange" /> Replies</span></div><div className="chart-wrap"><div className="y-axis"><span>400</span><span>300</span><span>200</span><span>100</span><span>0</span></div><div className="chart"><div className="grid-lines"><i /><i /><i /><i /><i /></div><svg viewBox="0 0 600 190" preserveAspectRatio="none" aria-label="Outreach performance chart"><path className="chart-area" d="M0 151 C35 145 46 125 75 135 S115 130 140 110 S174 119 200 98 S228 93 252 103 S285 110 310 85 S345 82 367 91 S402 72 425 79 S458 52 480 65 S512 59 535 37 S565 46 600 21 L600 190 L0 190 Z" /><path className="chart-line blue-line" d="M0 151 C35 145 46 125 75 135 S115 130 140 110 S174 119 200 98 S228 93 252 103 S285 110 310 85 S345 82 367 91 S402 72 425 79 S458 52 480 65 S512 59 535 37 S565 46 600 21" /><path className="chart-line orange-line" d="M0 173 C38 168 53 164 75 170 S115 164 140 153 S174 160 200 145 S228 149 252 155 S285 151 310 139 S345 145 367 138 S402 129 425 133 S458 116 480 124 S512 111 535 105 S565 104 600 91" /></svg><div className="x-axis"><span>May 12</span><span>May 14</span><span>May 16</span><span>May 18</span><span>May 20</span><span>May 22</span><span>May 24</span></div></div></div></article>
-            <article className="panel activity-panel"><div className="panel-header"><div><h2>Live activity</h2><p>Latest events from your workspace</p></div><button className="text-button" onClick={() => notify('Activity history opened.')}>View all <ArrowUpRight size={14} /></button></div><div className="activity-list">{activity.map((item) => <div className="activity-item" key={item.subject}><div className={`activity-icon ${item.color}`}>{item.type === 'reply' ? <Inbox size={15} /> : item.type === 'send' ? <Send size={15} /> : <Sparkles size={15} />}</div><div className="activity-copy"><span>{item.title}</span><strong>{item.subject}</strong><small>{item.time}</small></div></div>)}</div></article>
+            <article className="panel activity-panel"><div className="panel-header"><div><h2>Live activity</h2><p>Latest events from your workspace</p></div></div><div className="empty-panel"><Activity size={18} /><strong>{dataLoading ? 'Loading activity...' : 'No activity yet'}</strong><span>{dataLoading ? 'Fetching your latest events.' : 'Launch a campaign to start seeing events here.'}</span></div></article>
           </section>
 
-          <section className="lower-grid"><article className="panel pipeline-panel"><div className="panel-header"><div><h2>Lead pipeline</h2><p>Current status across all campaigns</p></div><button className="text-button" onClick={() => setActiveNav('Lead CRM')}>Open CRM <ArrowUpRight size={14} /></button></div><div className="pipeline-list">{pipeline.map((item) => <div className="pipeline-row" key={item.label}><div className="pipeline-name"><i className={`pipeline-dot ${item.color}`} />{item.label}</div><strong>{item.count}</strong><div className="pipeline-bar"><span className={item.color} style={{ width: `${Math.max(18, item.count / 1.5)}%` }} /></div><span className="pipeline-percent">{Math.round(item.count / 2.29)}%</span></div>)}</div></article><article className="panel queue-panel"><div className="panel-header"><div><h2>Pitch queue</h2><p>AI drafts waiting for approval</p></div><button className="queue-count" onClick={() => setActiveNav('Pitch queue')}>12 <ChevronRight size={14} /></button></div><div className="queue-feature"><div className="sparkle-orbit"><Sparkles size={20} /></div><div><strong>Keep your voice in the loop</strong><p>Review AI-generated pitches before they send.</p></div></div><button className="outline-button" onClick={() => setActiveNav('Pitch queue')}><FileText size={15} /> Review pitches</button></article></section>
+          <section className="lower-grid"><article className="panel pipeline-panel"><div className="panel-header"><div><h2>Lead pipeline</h2><p>Current status across all campaigns</p></div><button className="text-button" onClick={() => setActiveNav('Lead CRM')}>Open CRM <ArrowUpRight size={14} /></button></div><div className="pipeline-list">{livePipeline.map((item) => <div className="pipeline-row" key={item.label}><div className="pipeline-name"><i className={`pipeline-dot ${item.color}`} />{item.label}</div><strong>{dataLoading ? '...' : item.count}</strong><div className="pipeline-bar"><span className={item.color} style={{ width: `${Math.max(18, item.count / 1.5)}%` }} /></div><span className="pipeline-percent">{leads.length ? `${Math.round((item.count / leads.length) * 100)}%` : '0%'}</span></div>)}</div></article><article className="panel queue-panel"><div className="panel-header"><div><h2>Pitch queue</h2><p>AI drafts waiting for approval</p></div><button className="queue-count" onClick={() => setActiveNav('Pitch queue')}>0 <ChevronRight size={14} /></button></div><div className="queue-feature"><div className="sparkle-orbit"><Sparkles size={20} /></div><div><strong>No pitches waiting</strong><p>Approved campaigns will create drafts here.</p></div></div><button className="outline-button" onClick={() => setActiveNav('Pitch queue')}><FileText size={15} /> Open pitch queue</button></article></section>
 
-          <section className="panel leads-panel"><div className="panel-header leads-header"><div><h2>Priority leads</h2><p>Your highest-intent prospects, updated in real time</p></div><div className="lead-actions"><div className="search-box"><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search leads" /></div><button className="filter-button"><Filter size={15} /> Filters</button><button className="text-button" onClick={() => setActiveNav('Lead CRM')}>View all <ArrowUpRight size={14} /></button></div></div><div className="table-wrap"><table><thead><tr><th>Company</th><th>Campaign</th><th>Lead score</th><th>Status</th><th>Last activity</th><th /></tr></thead><tbody>{filteredLeads.map((lead, index) => <tr key={lead.name}><td><div className="company-cell"><div className={`company-avatar ${lead.color}`}>{lead.initials}</div><div><strong>{lead.name}</strong><span>{lead.person} · {lead.location}</span></div></div></td><td><span className="campaign-tag"><Building2 size={13} />{lead.campaign}</span></td><td><div className="score"><span className="score-ring" style={{ '--score': `${lead.score * 3.6}deg` }}>{lead.score}</span><span>{lead.score > 90 ? 'High intent' : lead.score > 80 ? 'Warm' : 'New'}</span></div></td><td><span className={`status-pill ${lead.status.toLowerCase().replace(' ', '-')}`}><i />{lead.status}</span></td><td><span className="last-activity">{index === 0 ? '8 min ago' : index === 1 ? '21 min ago' : index === 2 ? '1 hr ago' : '2 hrs ago'}</span></td><td><button className="row-menu" aria-label={`Open ${lead.name}`}><MoreHorizontal size={17} /></button></td></tr>)}</tbody></table></div></section>
+          <section className="panel leads-panel"><div className="panel-header leads-header"><div><h2>Priority leads</h2><p>Your highest-intent prospects, updated in real time</p></div><div className="lead-actions"><div className="search-box"><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search leads" /></div><button className="filter-button"><Filter size={15} /> Filters</button><button className="text-button" onClick={() => setActiveNav('Lead CRM')}>View all <ArrowUpRight size={14} /></button></div></div><div className="table-wrap">{dataError ? <div className="empty-panel error-state"><X size={18} /><strong>Could not load workspace data</strong><span>{dataError}</span></div> : filteredLeads.length === 0 && !dataLoading ? <div className="empty-panel"><Users size={18} /><strong>No leads yet</strong><span>Create a campaign to begin discovering prospects.</span><button className="outline-button" onClick={() => setShowCampaign(true)}>Create your first campaign</button></div> : <table><thead><tr><th>Company</th><th>Campaign</th><th>Lead score</th><th>Status</th><th>Last activity</th><th /></tr></thead><tbody>{filteredLeads.map((lead, index) => { const name = lead.business_name; const person = lead.decision_maker_name || 'Decision-maker not enriched'; const location = lead.campaigns?.location || 'Location unavailable'; const campaign = lead.campaigns?.target_niche || 'Unassigned'; const status = lead.status.replace('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()); const score = lead.lead_score || 0; return <tr key={lead.id}><td><div className="company-cell"><div className="company-avatar sky">{name.slice(0, 2).toUpperCase()}</div><div><strong>{name}</strong><span>{person} · {location}</span></div></div></td><td><span className="campaign-tag"><Building2 size={13} />{campaign}</span></td><td><div className="score"><span className="score-ring" style={{ '--score': `${score * 3.6}deg` }}>{score}</span><span>{score > 90 ? 'High intent' : score > 80 ? 'Warm' : 'New'}</span></div></td><td><span className={`status-pill ${lead.status.replace('_', '-')}`}><i />{status}</span></td><td><span className="last-activity">{index === 0 ? 'Latest' : 'Earlier'}</span></td><td><button className="row-menu" aria-label={`Open ${name}`}><MoreHorizontal size={17} /></button></td></tr> })}</tbody></table>}</div></section>
         </> : <PlaceholderView activeNav={activeNav} onPrimary={() => setShowCampaign(true)} />}
       </main>
-      {showCampaign && <CampaignModal onClose={() => setShowCampaign(false)} onCreate={() => { setShowCampaign(false); notify('Campaign created and queued for discovery.') }} />}
+      {showCampaign && <CampaignModal onClose={() => setShowCampaign(false)} onCreate={async (campaign) => { try { await createCampaign(campaign); setShowCampaign(false); notify('Campaign saved. Discovery is ready to connect.') } catch (error) { notify(`Could not save campaign: ${error.message}`); throw error } }} />}
       {toast && <div className="toast"><Check size={16} />{toast}</div>}
     </div>
   )
@@ -178,7 +194,18 @@ function PlaceholderView({ activeNav, onPrimary }) {
 function CampaignModal({ onClose, onCreate }) {
   const [linkedin, setLinkedin] = useState(false)
   const [approval, setApproval] = useState(true)
-  return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div className="campaign-modal"><div className="modal-header"><div><div className="eyebrow"><Target size={13} /> New campaign</div><h2>Find your next best customers.</h2><p>Set a target and ACE will handle discovery, enrichment, and outreach.</p></div><button className="icon-button" onClick={onClose} aria-label="Close"><X size={19} /></button></div><div className="modal-body"><label>Target niche<input defaultValue="Dental clinics" /></label><label>Location / region<input defaultValue="Austin, TX" /></label><div className="field-row"><label>Daily prospect limit<div className="number-input"><input type="number" defaultValue="200" /><span>leads / day</span></div></label><label>Sequence delay<select defaultValue="3"><option value="3">3 days between steps</option><option value="5">5 days between steps</option><option value="7">7 days between steps</option></select></label></div><div className="modal-section-label">Discovery sources</div><Toggle label="Google Places / Local Search" detail="Find verified local businesses" icon={<Globe2 size={17} />} enabled /><Toggle label="Corporate registry & web crawler" detail="Enrich domains and company data" icon={<Building2 size={17} />} enabled /><Toggle label="LinkedIn profile enrichment" detail="Identify key decision-makers" icon={<Users size={17} />} enabled={linkedin} onToggle={() => setLinkedin(!linkedin)} /><div className="modal-section-label">Launch preferences</div><Toggle label="Review AI pitches before sending" detail="Keep approval control over every first touch" icon={<Sparkles size={17} />} enabled={approval} onToggle={() => setApproval(!approval)} /></div><div className="modal-footer"><span><Clock3 size={14} /> Estimated first scan: under 5 min</span><button className="primary-button" onClick={onCreate}><Zap size={16} /> Launch campaign</button></div></div></div>
+  const [saving, setSaving] = useState(false)
+  const submit = async (event) => {
+    event.preventDefault()
+    setSaving(true)
+    const form = new FormData(event.currentTarget)
+    try {
+      await onCreate({ target_niche: form.get('target_niche'), location: form.get('location'), daily_limit: Number(form.get('daily_limit')), status: 'active' })
+    } catch (error) {
+      setSaving(false)
+    }
+  }
+  return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><form className="campaign-modal" onSubmit={submit}><div className="modal-header"><div><div className="eyebrow"><Target size={13} /> New campaign</div><h2>Find your next best customers.</h2><p>Set a target and ACE will handle discovery, enrichment, and outreach.</p></div><button type="button" className="icon-button" onClick={onClose} aria-label="Close"><X size={19} /></button></div><div className="modal-body"><label>Target niche<input name="target_niche" required defaultValue="Dental clinics" /></label><label>Location / region<input name="location" required defaultValue="Austin, TX" /></label><div className="field-row"><label>Daily prospect limit<div className="number-input"><input name="daily_limit" type="number" min="1" defaultValue="200" required /><span>leads / day</span></div></label><label>Sequence delay<select name="sequence_delay" defaultValue="3"><option value="3">3 days between steps</option><option value="5">5 days between steps</option><option value="7">7 days between steps</option></select></label></div><div className="modal-section-label">Discovery sources</div><Toggle label="Google Places / Local Search" detail="Find verified local businesses" icon={<Globe2 size={17} />} enabled /><Toggle label="Corporate registry & web crawler" detail="Enrich domains and company data" icon={<Building2 size={17} />} enabled /><Toggle label="LinkedIn profile enrichment" detail="Identify key decision-makers" icon={<Users size={17} />} enabled={linkedin} onToggle={() => setLinkedin(!linkedin)} /><div className="modal-section-label">Launch preferences</div><Toggle label="Review AI pitches before sending" detail="Keep approval control over every first touch" icon={<Sparkles size={17} />} enabled={approval} onToggle={() => setApproval(!approval)} /></div><div className="modal-footer"><span><Clock3 size={14} /> Campaign will be saved to your workspace</span><button className="primary-button" disabled={saving}><Zap size={16} /> {saving ? 'Saving...' : 'Launch campaign'}</button></div></form></div>
 }
 
 function Toggle({ label, detail, icon, enabled, onToggle }) { return <button className="toggle-row" onClick={onToggle}><div className="toggle-icon">{icon}</div><div className="toggle-copy"><strong>{label}</strong><span>{detail}</span></div><span className={`toggle ${enabled ? 'on' : ''}`}><i /></span></button> }

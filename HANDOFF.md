@@ -42,7 +42,7 @@ Authentication now uses the Supabase client in `src/lib/supabase.js`:
 - Sign-out from the profile row
 - Missing Supabase environment variables show a configuration message
 
-The dashboard data is still mock data. Authentication is real, but campaigns, leads, analytics, activity, and pitch queue records are not yet loaded from Supabase.
+The dashboard now queries authenticated `campaigns`, `leads`, and `email_logs` records. Metrics, pipeline counts, reply rate, and priority leads are live. Empty and error states replace the former sample records. The campaign builder validates and persists an active campaign row. Discovery is not yet implemented, so new campaigns currently remain empty until a scouting worker is added.
 
 ## Supabase
 
@@ -112,14 +112,12 @@ Supabase's project-level GitHub integration was attempted from Project Settings 
 2. Decide whether to complete Supabase GitHub integration; it is optional for the current Git-based workflow.
 3. Add the Supabase anon key to deployment environment variables.
 4. Configure Supabase email confirmation and Google OAuth redirect settings as needed.
-5. Replace mock dashboard data with authenticated Supabase queries and mutations.
-6. Add campaign creation persistence from the campaign modal.
-7. Add CRM table/Kanban interactions and pitch approval persistence.
-8. Add server-side/background jobs for discovery, enrichment, email batching, and exactly five follow-ups.
-9. Add the `/api/webhooks/email-status` handler and stop follow-ups on replies.
-10. Add provider integrations for Google Places, Apollo, Hunter, and Resend/SendGrid using server-only secrets.
-11. Add automated tests for auth, RLS, campaign creation, lead status transitions, follow-up halting, and webhook processing.
-12. Deploy the frontend and configure production environment variables.
+5. Add CRM table/Kanban interactions and pitch approval persistence.
+6. Add server-side/background jobs for discovery, enrichment, email batching, and exactly five follow-ups.
+7. Add the `/api/webhooks/email-status` handler and stop follow-ups on replies.
+8. Add provider integrations for Google Places, Apollo, Hunter, and Resend/SendGrid using server-only secrets.
+9. Add automated tests for auth, RLS, campaign creation, lead status transitions, follow-up halting, and webhook processing.
+10. Deploy the frontend and configure production environment variables.
 
 Current deployment note: Vercel is not authenticated in the browser session. The deployed app showed the missing-environment message because Vercel did not have `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` configured at build time. Add both under Vercel Project Settings -> Environment Variables for Production, then redeploy. The local `.env` is not uploaded to Vercel.
 
