@@ -76,6 +76,14 @@ Migration source:
 
 Important: the SQL editor migration was applied manually and verified with an information-schema query returning all four tables. The project does not currently have a migration history workflow configured through the Supabase CLI.
 
+Email automation foundations are in `supabase/functions/`:
+
+- `send-approved-draft/index.ts` sends one approved draft through Resend, only when the lead has a verified recipient email and the sequence is not halted.
+- `email-status-webhook/index.ts` records provider events and halts a lead on reply, bounce, complaint, or unsubscribe. It requires the `x-webhook-secret` header to match `EMAIL_WEBHOOK_SECRET`.
+- `supabase/migrations/20260824000002_email_automation.sql` adds provider message IDs, event fields, verified-email state, and sequence-halt state.
+
+Required Supabase Function secrets are `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `EMAIL_WEBHOOK_SECRET`, and `SUPABASE_SERVICE_ROLE_KEY` (the latter is normally provided by the platform). Deploy with the Supabase CLI after linking the project; never place these in Vite variables or Git.
+
 ## Local Environment
 
 - `src/lib/supabase.js` initializes the client from `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` when both are present.
@@ -120,10 +128,11 @@ Supabase's project-level GitHub integration was attempted from Project Settings 
 5. Apply the `pitch_drafts` table and policy from the updated migration in Supabase SQL Editor.
 6. Add CRM table/Kanban interactions and pitch approval persistence.
 7. Move free scouting behind a server-side worker or Edge Function and deduplicate results.
-8. Add the `/api/webhooks/email-status` handler and stop follow-ups on replies.
-9. Add provider integrations for Google Places, Apollo, Hunter, and Resend/SendGrid using server-only secrets.
-10. Add automated tests for auth, RLS, campaign creation, lead status transitions, follow-up halting, and webhook processing.
-11. Deploy the frontend and configure production environment variables.
+8. Apply `20260824000002_email_automation.sql` in Supabase SQL Editor.
+9. Configure a verified Resend sending domain and Supabase Function secrets, then deploy both Edge Functions.
+10. Add a scheduled worker for exactly five follow-ups, checking `sequence_halted` before every send.
+11. Add automated tests for auth, RLS, campaign creation, lead status transitions, follow-up halting, and webhook processing.
+12. Deploy the frontend and configure production environment variables.
 
 Current deployment note: Vercel is not authenticated in the browser session. The deployed app showed the missing-environment message because Vercel did not have `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` configured at build time. Add both under Vercel Project Settings -> Environment Variables for Production, then redeploy. The local `.env` is not uploaded to Vercel.
 
