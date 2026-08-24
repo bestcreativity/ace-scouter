@@ -75,7 +75,7 @@ Important: the SQL editor migration was applied manually and verified with an in
 
 - `src/lib/supabase.js` initializes the client from `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` when both are present.
 - `.env` exists locally and contains the user-entered Supabase URL and anon key. It is ignored by Git and must never be committed or pasted into chat.
-- `.env.example` is tracked and contains only placeholders plus the project URL.
+- `.env.example` is tracked and contains only placeholders plus the project URL. If it ever contains a real key, sanitize it immediately and rotate the key if it was pushed publicly.
 - `.gitignore` ignores `node_modules/`, `dist/`, `.env`, and `.env.*` while allowing `.env.example`.
 
 To run locally:
@@ -120,6 +120,8 @@ Supabase's project-level GitHub integration was attempted from Project Settings 
 10. Add provider integrations for Google Places, Apollo, Hunter, and Resend/SendGrid using server-only secrets.
 11. Add automated tests for auth, RLS, campaign creation, lead status transitions, follow-up halting, and webhook processing.
 12. Deploy the frontend and configure production environment variables.
+
+Current deployment note: Vercel is not authenticated in the browser session. The deployed app showed the missing-environment message because Vercel did not have `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` configured at build time. Add both under Vercel Project Settings -> Environment Variables for Production, then redeploy. The local `.env` is not uploaded to Vercel.
 
 ## Working Rules For Future Chats
 
