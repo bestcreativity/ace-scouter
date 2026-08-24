@@ -30,7 +30,10 @@ Implemented in `src/main.jsx` and `src/styles.css`:
 - Campaign fields for niche, location, daily limit, and sequence delay
 - Discovery toggles for Google Places, corporate/web crawler, and LinkedIn enrichment
 - AI pitch approval toggle
-- Placeholder views for Campaigns, Lead CRM, Pitch queue, and Integrations
+- Search Leads is now the default focused workspace; Overview is no longer in the visible navigation.
+- Search Leads accepts niche, location, and a free-mode lead limit, then runs OpenStreetMap Nominatim + Overpass discovery and saves real leads.
+- Pitch queue is a manual per-lead review flow: enter recipient email, generate a deterministic personalized draft, approve/reject it, send when the provider is configured, and view tracked send/open state.
+- Integrations lets each user edit their own sender email.
 - Toast feedback for key interactions
 
 Authentication now uses the Supabase client in `src/lib/supabase.js`:
@@ -48,7 +51,7 @@ The pitch queue implementation is in `src/main.jsx`: it generates deterministic 
 
 The dashboard now queries authenticated `campaigns`, `leads`, and `email_logs` records. Metrics, pipeline counts, reply rate, and priority leads are live. Empty and error states replace the former sample records. The campaign builder validates and persists an active campaign row.
 
-Free scouting is now implemented in `src/main.jsx`: after campaign creation, the browser uses OpenStreetMap Nominatim to geocode the location and the public Overpass API to find named nearby businesses, then saves up to 10 leads with public website links when available. This is an MVP discovery path with public-service rate limits; it is not a substitute for paid Places or enrichment providers and does not discover verified decision-maker emails.
+Free scouting is now implemented in `src/main.jsx`: Search Leads uses OpenStreetMap Nominatim to geocode the location and the public Overpass API to find named nearby businesses, then saves up to 10 leads with public website links when available. This is an MVP discovery path with public-service rate limits; Google Maps/Google Business API is not included because it generally requires billing. The free path does not discover verified decision-maker emails; users enter recipient emails manually in Pitch queue.
 
 ## Supabase
 
@@ -129,7 +132,7 @@ Supabase's project-level GitHub integration was attempted from Project Settings 
 3. Add the Supabase anon key to deployment environment variables.
 4. Configure Supabase email confirmation and Google OAuth redirect settings as needed.
 5. Apply `20260824000002_email_automation.sql` in Supabase SQL Editor so sending fields exist.
-6. Add CRM table/Kanban interactions and pitch approval persistence.
+6. Add a real recipient/lead import workflow for users who have verified contact data.
 7. Move free scouting behind a server-side worker or Edge Function and deduplicate results.
 8. Configure a verified Resend sending domain and Supabase Function secrets, then deploy both Edge Functions.
 10. Add a scheduled worker for exactly five follow-ups, checking `sequence_halted` before every send.
