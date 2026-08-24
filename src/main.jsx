@@ -119,9 +119,35 @@ function Dashboard({ session }) {
   ), [query])
 
   const createCampaign = async (campaign) => {
-    const { error } = await supabase.from('campaigns').insert({ ...campaign, user_id: session.user.id })
+    const { data, error } = await supabase.from('campaigns').insert({ ...campaign, user_id: session.user.id }).select().single()
     if (error) throw error
     await loadData()
+    return data
+  }
+
+  const scoutCampaign = async (campaign) => {
+    const location = encodeURIComponent(campaign.location)
+    const geocodeResponse = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${location}`)
+    if (!geocodeResponse.ok) throw new Error('The free map service could not find that location.')
+    const [place] = await geocodeResponse.json()
+    if (!place) throw new Error('Location not found. Try a city and region, such as Austin, TX.')
+    const query = `[out:json][timeout:25];(nwr["name"](${place.boundingbox[0]},${place.boundingbox[2]},${place.boundingbox[1]},${place.boundingbox[3]}););out center tags;`
+    const discoveryResponse = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`)
+    if (!discoveryResponse.ok) throw new Error('The free scouting service is busy. Try again in a moment.')
+    const discovery = await discoveryResponse.json()
+    const results = (discovery.elements || []).filter((element) => element.tags?.name).slice(0, Math.min(campaign.daily_limit, 10))
+    if (!results.length) return 0
+    const rows = results.map((element) => ({
+      campaign_id: campaign.id,
+      business_name: element.tags.name,
+      website: element.tags.website || element.tags['contact:website'] || null,
+      status: 'discovered',
+      lead_score: 50,
+    }))
+    const { error } = await supabase.from('leads').insert(rows)
+    if (error) throw error
+    await loadData()
+    return rows.length
   }
 
   const notify = (message) => {
@@ -179,7 +205,7 @@ function Dashboard({ session }) {
           <section className="panel leads-panel"><div className="panel-header leads-header"><div><h2>Priority leads</h2><p>Your highest-intent prospects, updated in real time</p></div><div className="lead-actions"><div className="search-box"><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search leads" /></div><button className="filter-button"><Filter size={15} /> Filters</button><button className="text-button" onClick={() => setActiveNav('Lead CRM')}>View all <ArrowUpRight size={14} /></button></div></div><div className="table-wrap">{dataError ? <div className="empty-panel error-state"><X size={18} /><strong>Could not load workspace data</strong><span>{dataError}</span></div> : filteredLeads.length === 0 && !dataLoading ? <div className="empty-panel"><Users size={18} /><strong>No leads yet</strong><span>Create a campaign to begin discovering prospects.</span><button className="outline-button" onClick={() => setShowCampaign(true)}>Create your first campaign</button></div> : <table><thead><tr><th>Company</th><th>Campaign</th><th>Lead score</th><th>Status</th><th>Last activity</th><th /></tr></thead><tbody>{filteredLeads.map((lead, index) => { const name = lead.business_name; const person = lead.decision_maker_name || 'Decision-maker not enriched'; const location = lead.campaigns?.location || 'Location unavailable'; const campaign = lead.campaigns?.target_niche || 'Unassigned'; const status = lead.status.replace('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()); const score = lead.lead_score || 0; return <tr key={lead.id}><td><div className="company-cell"><div className="company-avatar sky">{name.slice(0, 2).toUpperCase()}</div><div><strong>{name}</strong><span>{person} · {location}</span></div></div></td><td><span className="campaign-tag"><Building2 size={13} />{campaign}</span></td><td><div className="score"><span className="score-ring" style={{ '--score': `${score * 3.6}deg` }}>{score}</span><span>{score > 90 ? 'High intent' : score > 80 ? 'Warm' : 'New'}</span></div></td><td><span className={`status-pill ${lead.status.replace('_', '-')}`}><i />{status}</span></td><td><span className="last-activity">{index === 0 ? 'Latest' : 'Earlier'}</span></td><td><button className="row-menu" aria-label={`Open ${name}`}><MoreHorizontal size={17} /></button></td></tr> })}</tbody></table>}</div></section>
         </> : <PlaceholderView activeNav={activeNav} onPrimary={() => setShowCampaign(true)} />}
       </main>
-      {showCampaign && <CampaignModal onClose={() => setShowCampaign(false)} onCreate={async (campaign) => { try { await createCampaign(campaign); setShowCampaign(false); notify('Campaign saved. Discovery is ready to connect.') } catch (error) { notify(`Could not save campaign: ${error.message}`); throw error } }} />}
+      {showCampaign && <CampaignModal onClose={() => setShowCampaign(false)} onCreate={async (campaign) => { try { const savedCampaign = await createCampaign(campaign); setShowCampaign(false); notify('Campaign saved. Scouting nearby businesses...'); const count = await scoutCampaign(savedCampaign); notify(count ? `Scouting complete: ${count} leads added.` : 'Campaign saved, but no named businesses were found.') } catch (error) { notify(`Could not complete campaign: ${error.message}`); throw error } }} />}
       {toast && <div className="toast"><Check size={16} />{toast}</div>}
     </div>
   )
@@ -205,7 +231,7 @@ function CampaignModal({ onClose, onCreate }) {
       setSaving(false)
     }
   }
-  return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><form className="campaign-modal" onSubmit={submit}><div className="modal-header"><div><div className="eyebrow"><Target size={13} /> New campaign</div><h2>Find your next best customers.</h2><p>Set a target and ACE will handle discovery, enrichment, and outreach.</p></div><button type="button" className="icon-button" onClick={onClose} aria-label="Close"><X size={19} /></button></div><div className="modal-body"><label>Target niche<input name="target_niche" required defaultValue="Dental clinics" /></label><label>Location / region<input name="location" required defaultValue="Austin, TX" /></label><div className="field-row"><label>Daily prospect limit<div className="number-input"><input name="daily_limit" type="number" min="1" defaultValue="200" required /><span>leads / day</span></div></label><label>Sequence delay<select name="sequence_delay" defaultValue="3"><option value="3">3 days between steps</option><option value="5">5 days between steps</option><option value="7">7 days between steps</option></select></label></div><div className="modal-section-label">Discovery sources</div><Toggle label="Google Places / Local Search" detail="Find verified local businesses" icon={<Globe2 size={17} />} enabled /><Toggle label="Corporate registry & web crawler" detail="Enrich domains and company data" icon={<Building2 size={17} />} enabled /><Toggle label="LinkedIn profile enrichment" detail="Identify key decision-makers" icon={<Users size={17} />} enabled={linkedin} onToggle={() => setLinkedin(!linkedin)} /><div className="modal-section-label">Launch preferences</div><Toggle label="Review AI pitches before sending" detail="Keep approval control over every first touch" icon={<Sparkles size={17} />} enabled={approval} onToggle={() => setApproval(!approval)} /></div><div className="modal-footer"><span><Clock3 size={14} /> Campaign will be saved to your workspace</span><button className="primary-button" disabled={saving}><Zap size={16} /> {saving ? 'Saving...' : 'Launch campaign'}</button></div></form></div>
+  return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><form className="campaign-modal" onSubmit={submit}><div className="modal-header"><div><div className="eyebrow"><Target size={13} /> New campaign</div><h2>Find your next best customers.</h2><p>Set a target and ACE will handle discovery, enrichment, and outreach.</p></div><button type="button" className="icon-button" onClick={onClose} aria-label="Close"><X size={19} /></button></div><div className="modal-body"><label>Target niche<input name="target_niche" required defaultValue="Dental clinics" /></label><label>Location / region<input name="location" required defaultValue="Austin, TX" /></label><div className="field-row"><label>Daily prospect limit<div className="number-input"><input name="daily_limit" type="number" min="1" max="10" defaultValue="10" required /><span>max 10 free</span></div></label><label>Sequence delay<select name="sequence_delay" defaultValue="3"><option value="3">3 days between steps</option><option value="5">5 days between steps</option><option value="7">7 days between steps</option></select></label></div><div className="modal-section-label">Discovery sources</div><Toggle label="OpenStreetMap local search" detail="Free named-business discovery" icon={<Globe2 size={17} />} enabled /><Toggle label="Website links" detail="Save public websites when available" icon={<Building2 size={17} />} enabled /><Toggle label="Decision-maker enrichment" detail="Connect a provider later" icon={<Users size={17} />} enabled={linkedin} onToggle={() => setLinkedin(!linkedin)} /><div className="modal-section-label">Launch preferences</div><Toggle label="Review AI pitches before sending" detail="Keep approval control over every first touch" icon={<Sparkles size={17} />} enabled={approval} onToggle={() => setApproval(!approval)} /></div><div className="modal-footer"><span><Clock3 size={14} /> Free scouting limit: 10 leads</span><button className="primary-button" disabled={saving}><Zap size={16} /> {saving ? 'Scouting...' : 'Launch campaign'}</button></div></form></div>
 }
 
 function Toggle({ label, detail, icon, enabled, onToggle }) { return <button className="toggle-row" onClick={onToggle}><div className="toggle-icon">{icon}</div><div className="toggle-copy"><strong>{label}</strong><span>{detail}</span></div><span className={`toggle ${enabled ? 'on' : ''}`}><i /></span></button> }

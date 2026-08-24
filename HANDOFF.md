@@ -42,7 +42,9 @@ Authentication now uses the Supabase client in `src/lib/supabase.js`:
 - Sign-out from the profile row
 - Missing Supabase environment variables show a configuration message
 
-The dashboard now queries authenticated `campaigns`, `leads`, and `email_logs` records. Metrics, pipeline counts, reply rate, and priority leads are live. Empty and error states replace the former sample records. The campaign builder validates and persists an active campaign row. Discovery is not yet implemented, so new campaigns currently remain empty until a scouting worker is added.
+The dashboard now queries authenticated `campaigns`, `leads`, and `email_logs` records. Metrics, pipeline counts, reply rate, and priority leads are live. Empty and error states replace the former sample records. The campaign builder validates and persists an active campaign row.
+
+Free scouting is now implemented in `src/main.jsx`: after campaign creation, the browser uses OpenStreetMap Nominatim to geocode the location and the public Overpass API to find named nearby businesses, then saves up to 10 leads with public website links when available. This is an MVP discovery path with public-service rate limits; it is not a substitute for paid Places or enrichment providers and does not discover verified decision-maker emails.
 
 ## Supabase
 
@@ -113,7 +115,7 @@ Supabase's project-level GitHub integration was attempted from Project Settings 
 3. Add the Supabase anon key to deployment environment variables.
 4. Configure Supabase email confirmation and Google OAuth redirect settings as needed.
 5. Add CRM table/Kanban interactions and pitch approval persistence.
-6. Add server-side/background jobs for discovery, enrichment, email batching, and exactly five follow-ups.
+6. Move free scouting behind a server-side worker or Edge Function and deduplicate results.
 7. Add the `/api/webhooks/email-status` handler and stop follow-ups on replies.
 8. Add provider integrations for Google Places, Apollo, Hunter, and Resend/SendGrid using server-only secrets.
 9. Add automated tests for auth, RLS, campaign creation, lead status transitions, follow-up halting, and webhook processing.
