@@ -11,7 +11,7 @@ This file is the source of truth for a new chat. Update it whenever implementati
 - Local path: `C:\Users\DELL\Desktop\webappacescouter`
 - GitHub: https://github.com/bestcreativity/ace-scouter
 - Branch: `main`
-- Latest known commit: `50afc7a Add Supabase authentication entrypoint`
+- Latest known commit: `4bfaeae Add editable sender email settings`
 - Remote: `origin` points to the GitHub repository above
 - Local dev URL: http://localhost:5173/
 
@@ -69,6 +69,7 @@ Live database state was verified in Supabase SQL Editor. These tables exist:
 - `public.leads`
 - `public.email_logs`
 - `public.pitch_drafts` (live and verified; use the separate `20260824000001_pitch_drafts.sql` migration)
+- `profiles.sending_email` (migration prepared in `20260824000004_sender_email.sql`; apply before using editable sender settings)
 
 The migration also enables RLS, creates user-scoped policies, and creates an `auth.users` trigger that inserts a profile row for new users.
 
