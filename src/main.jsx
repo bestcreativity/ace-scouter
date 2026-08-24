@@ -1,11 +1,12 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
   Activity, ArrowUpRight, BarChart3, Bell, Building2, Check, ChevronDown, ChevronRight,
   CircleHelp, Clock3, FileText, Filter, Globe2, Inbox, LayoutDashboard, Menu, MoreHorizontal,
-  PanelLeftClose, Plus, Search, Send, Settings, SlidersHorizontal, Sparkles, Target, Users,
-  X, Zap
+  LockKeyhole, LogOut, PanelLeftClose, Plus, Search, Send, Settings, SlidersHorizontal,
+  Sparkles, Target, Users, X, Zap
 } from 'lucide-react'
+import { supabase } from './lib/supabase'
 import './styles.css'
 
 const navItems = [
@@ -45,6 +46,57 @@ const leads = [
 ]
 
 function App() {
+  const [session, setSession] = useState(null)
+  const [authLoading, setAuthLoading] = useState(Boolean(supabase))
+
+  useEffect(() => {
+    if (!supabase) return undefined
+
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session)
+      setAuthLoading(false)
+    })
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession)
+      setAuthLoading(false)
+    })
+
+    return () => listener.subscription.unsubscribe()
+  }, [])
+
+  if (!supabase) return <AuthScreen configurationError="Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your local .env file." />
+  if (authLoading) return <div className="auth-shell"><div className="auth-loading">Loading your workspace...</div></div>
+  if (!session) return <AuthScreen />
+
+  return <Dashboard session={session} />
+}
+
+function AuthScreen({ configurationError }) {
+  const [mode, setMode] = useState('signin')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [fullName, setFullName] = useState('')
+  const [message, setMessage] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const submit = async (event) => {
+    event.preventDefault()
+    if (!supabase) return
+    setLoading(true)
+    setMessage('')
+    const result = mode === 'signup'
+      ? await supabase.auth.signUp({ email, password, options: { data: { full_name: fullName } } })
+      : await supabase.auth.signInWithPassword({ email, password })
+    setLoading(false)
+    if (result.error) setMessage(result.error.message)
+    else if (mode === 'signup') setMessage('Check your email to confirm your account, then sign in.')
+  }
+
+  return <div className="auth-shell"><div className="auth-glow" /><main className="auth-card"><div className="auth-brand"><div className="brand-mark"><span>A</span></div><div className="brand-copy"><strong>ACE</strong><span>SCOUTER</span></div></div><div className="auth-icon"><LockKeyhole size={21} /></div><div className="eyebrow"><Sparkles size={13} /> Prospecting command center</div><h1>{mode === 'signin' ? 'Welcome back.' : 'Start scouting smarter.'}</h1><p className="auth-subtitle">{mode === 'signin' ? 'Sign in to continue to your workspace.' : 'Create your workspace and turn local demand into pipeline.'}</p>{configurationError && <div className="auth-message error">{configurationError}</div>}{!configurationError && <form onSubmit={submit}>{mode === 'signup' && <label>Full name<input required value={fullName} onChange={(event) => setFullName(event.target.value)} placeholder="Jordan Davis" /></label>}<label>Email address<input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@company.com" /></label><label>Password<input required minLength="6" type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="At least 6 characters" /></label>{message && <div className={`auth-message ${message.startsWith('Check') ? 'success' : 'error'}`}>{message}</div>}<button className="primary-button auth-submit" disabled={loading}>{loading ? 'Connecting...' : mode === 'signin' ? 'Sign in' : 'Create account'} <ArrowUpRight size={15} /></button></form>}<button className="auth-switch" onClick={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setMessage('') }}>{mode === 'signin' ? 'New here? Create an account' : 'Already have an account? Sign in'}</button></main></div>
+}
+
+function Dashboard({ session }) {
   const [activeNav, setActiveNav] = useState('Overview')
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 760)
   const [showCampaign, setShowCampaign] = useState(false)
@@ -86,7 +138,7 @@ function App() {
         </nav>
         <div className="sidebar-bottom">
           {sidebarOpen && <div className="usage-card"><div className="usage-top"><span>Monthly leads</span><strong>68%</strong></div><div className="progress"><span /></div><p>6,812 of 10,000 used</p><button onClick={() => notify('Upgrade flow is ready to connect.')}>Upgrade plan <ArrowUpRight size={13} /></button></div>}
-          <button className="profile-row"><div className="profile-avatar">JD</div>{sidebarOpen && <><div className="profile-copy"><strong>Jordan Davis</strong><span>Admin</span></div><MoreHorizontal size={17} /></>}</button>
+          <button className="profile-row" onClick={() => supabase.auth.signOut()}><div className="profile-avatar">{(session.user.user_metadata?.full_name || session.user.email || 'U').slice(0, 2).toUpperCase()}</div>{sidebarOpen && <><div className="profile-copy"><strong>{session.user.user_metadata?.full_name || session.user.email}</strong><span>Sign out</span></div><LogOut size={15} /></>}</button>
         </div>
       </aside>
 
