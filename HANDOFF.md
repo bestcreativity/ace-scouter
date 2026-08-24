@@ -44,7 +44,7 @@ Authentication now uses the Supabase client in `src/lib/supabase.js`:
 
 Users can edit their outbound sender address in the Integrations screen. It is stored as `profiles.sending_email` and the email function reads that per-user value at send time, so it can be changed without redeploying. Apply `supabase/migrations/20260824000004_sender_email.sql` to add the live column. The configured address still must belong to a provider-verified sending domain.
 
-The pitch queue implementation is in `src/main.jsx`: it generates deterministic personalized drafts from discovered lead data, stores them in `pitch_drafts`, and supports pending/approved/rejected review states. Migration `supabase/migrations/20260824000001_pitch_drafts.sql` has been applied to the live database and verified with an information-schema query.
+The pitch queue implementation is in `src/main.jsx`: it generates deterministic personalized drafts from discovered lead data, stores them in `pitch_drafts`, and supports pending/approved/rejected review states. Users can enter a recipient email on each draft; the app saves it to `leads.decision_maker_email`, marks it user-verified, and exposes a guarded send action. Migration `supabase/migrations/20260824000001_pitch_drafts.sql` has been applied to the live database and verified with an information-schema query.
 
 The dashboard now queries authenticated `campaigns`, `leads`, and `email_logs` records. Metrics, pipeline counts, reply rate, and priority leads are live. Empty and error states replace the former sample records. The campaign builder validates and persists an active campaign row.
 
@@ -128,11 +128,10 @@ Supabase's project-level GitHub integration was attempted from Project Settings 
 2. Decide whether to complete Supabase GitHub integration; it is optional for the current Git-based workflow.
 3. Add the Supabase anon key to deployment environment variables.
 4. Configure Supabase email confirmation and Google OAuth redirect settings as needed.
-5. Apply the `pitch_drafts` table and policy from the updated migration in Supabase SQL Editor.
+5. Apply `20260824000002_email_automation.sql` in Supabase SQL Editor so sending fields exist.
 6. Add CRM table/Kanban interactions and pitch approval persistence.
 7. Move free scouting behind a server-side worker or Edge Function and deduplicate results.
-8. Apply `20260824000002_email_automation.sql` in Supabase SQL Editor.
-9. Configure a verified Resend sending domain and Supabase Function secrets, then deploy both Edge Functions.
+8. Configure a verified Resend sending domain and Supabase Function secrets, then deploy both Edge Functions.
 10. Add a scheduled worker for exactly five follow-ups, checking `sequence_halted` before every send.
 11. Add automated tests for auth, RLS, campaign creation, lead status transitions, follow-up halting, and webhook processing.
 12. Deploy the frontend and configure production environment variables.
